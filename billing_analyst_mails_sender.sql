@@ -56,7 +56,6 @@ SELECT 	a.dd,
 FROM tt1 a
 LEFT JOIN redshift_analytics_db.prodmysqldatabase.user_profile up ON a.man_external_id = up.external_id;
 
-
 /*
 
 select 
