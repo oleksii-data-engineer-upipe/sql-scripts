@@ -1,30 +1,87 @@
-CREATE OR REPLACE PROCEDURE billing_analyst.refresh()
-AS 
-$$
+--CREATE TABLE IF NOT EXISTS prod_analytic_db.billing_analyst.refresh_logs (
+--    log_id BIGINT IDENTITY(1,1),
+--    log_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+--    view_name VARCHAR(255),
+--    status VARCHAR(50),
+--    message TEXT,
+--    updated_rows INTEGER,
+--    duration_seconds DECIMAL(10,2)
+--) DISTSTYLE AUTO
+--  SORTKEY(log_time);
+
+
+CREATE OR REPLACE PROCEDURE prod_analytic_db.billing_analyst.refresh()
+AS $$
+DECLARE
+    rec RECORD;
+    v_start_time TIMESTAMP;
+    v_step_start_time TIMESTAMP;
+    v_error_message TEXT;
+    refresh_query TEXT;
 BEGIN
-    REFRESH MATERIALIZED VIEW billing_analyst.mv_mails_sender; 		
- 	REFRESH MATERIALIZED VIEW billing_analyst.mv_summary_2pack; 
-	REFRESH MATERIALIZED VIEW billing_analyst.mv_summary_new_paid;	
-    REFRESH MATERIALIZED VIEW billing_analyst.mv_3pack_combined_data
-    COMMIT;
-	REFRESH MATERIALIZED VIEW billing_analyst.mv_summary_200;		
-	REFRESH MATERIALIZED VIEW billing_analyst.mv_summary_500;		
-	REFRESH MATERIALIZED VIEW billing_analyst.mv_summary_1000;		
-    COMMIT;
-	REFRESH MATERIALIZED VIEW billing_analyst.mv_basis;  
-	REFRESH MATERIALIZED VIEW billing_analyst.mv_summary_regs_2;		 
-	REFRESH MATERIALIZED VIEW billing_analyst.mv_summary_3pack;
-    COMMIT;
+    v_start_time := GETDATE();
+
+    FOR rec IN 
+        SELECT name 
+        FROM stv_mv_info 
+        WHERE schema = 'billing_analyst' AND name LIKE 'mv_%'
+    LOOP
+        v_step_start_time := GETDATE();
+        BEGIN
+            refresh_query := 'REFRESH MATERIALIZED VIEW billing_analyst.' || rec.name;
+            EXECUTE refresh_query;
+
+            INSERT INTO prod_analytic_db.billing_analyst.refresh_logs (
+                view_name, status, message, duration_seconds
+            )
+            VALUES (
+                rec.name,
+                'Success',
+                'Materialized view refreshed successfully.',
+                DATEDIFF(seconds, v_step_start_time, GETDATE())
+            );
+
+        EXCEPTION WHEN OTHERS THEN
+            SELECT SQLERRM INTO v_error_message;
+
+            INSERT INTO prod_analytic_db.billing_analyst.refresh_logs (
+                view_name, status, message, duration_seconds
+            )
+            VALUES (
+                rec.name,
+                'Error',
+                v_error_message,
+                DATEDIFF(seconds, v_step_start_time, GETDATE())
+            );
+
+            -- Log a notice instead of halting execution
+            RAISE NOTICE 'Error refreshing materialized view %: %', rec.name, v_error_message;
+            CONTINUE; -- Skip to the next materialized view
+        END;
+    END LOOP;
+
+EXCEPTION WHEN OTHERS THEN
+    SELECT SQLERRM INTO v_error_message;
+    INSERT INTO prod_analytic_db.billing_analyst.refresh_logs (
+        view_name, status, message, duration_seconds
+    )
+    VALUES (
+        'Procedure',
+        'Fatal Error',
+        v_error_message,
+        DATEDIFF(seconds, v_start_time, GETDATE())
+    );
+
+    -- Log the fatal error and re-raise
+    RAISE EXCEPTION 'Fatal Error in procedure: %', v_error_message;
 END;
-$$ 
-LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
-call billing_analyst.refresh()
 
-/*
-select date::date, count(*)
-from 
-group by 1
-order by 1 desc
-limit 5
-*/
+
+-- call prod_analytic_db.billing_analyst.refresh()
+-- select * from prod_analytic_db.billing_analyst.refresh_logs
+
+
+
+
