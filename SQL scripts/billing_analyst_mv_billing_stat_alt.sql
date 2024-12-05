@@ -1,4 +1,4 @@
-CREATE MATERIALIZED VIEW billing_analyst.mv_billing_stat_alt
+CREATE MATERIALIZED VIEW prod_analytic_db.billing_analyst.mv_billing_stat_alt
 DISTKEY (external_id)
 SORTKEY (time)
 as 
