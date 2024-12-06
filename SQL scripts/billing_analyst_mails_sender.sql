@@ -1,4 +1,5 @@
 
+          
 create MATERIALIZED VIEW prod_analytic_db.billing_analyst.mv_mails_sender
 DISTSTYLE KEY 
 DISTKEY(man_external_id) 

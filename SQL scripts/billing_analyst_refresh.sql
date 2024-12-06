@@ -20,7 +20,8 @@ DECLARE
     refresh_query TEXT;
 BEGIN
     v_start_time := GETDATE();
-
+	INSERT INTO prod_analytic_db.billing_analyst.refresh_logs ( view_name, status, message, duration_seconds) 
+	VALUES ('----------', '----------', 'START', 0);
     FOR rec IN 
         SELECT name 
         FROM stv_mv_info 
@@ -28,60 +29,34 @@ BEGIN
     LOOP
         v_step_start_time := GETDATE();
         BEGIN
+			-- v_step_start_time := GETDATE();
             refresh_query := 'REFRESH MATERIALIZED VIEW billing_analyst.' || rec.name;
             EXECUTE refresh_query;
-
-            INSERT INTO prod_analytic_db.billing_analyst.refresh_logs (
-                view_name, status, message, duration_seconds
-            )
-            VALUES (
-                rec.name,
-                'Success',
-                'Materialized view refreshed successfully.',
-                DATEDIFF(seconds, v_step_start_time, GETDATE())
-            );
+			
+            INSERT INTO prod_analytic_db.billing_analyst.refresh_logs ( view_name, status, message, duration_seconds)
+            VALUES ( rec.name, 'Success', 'Materialized view refreshed successfully.', DATEDIFF(seconds, v_step_start_time, GETDATE()));
 
         EXCEPTION WHEN OTHERS THEN
             SELECT SQLERRM INTO v_error_message;
+			--v_step_start_time := GETDATE();
+            INSERT INTO prod_analytic_db.billing_analyst.refresh_logs ( view_name, status, message, duration_seconds)
+            VALUES (rec.name, 'Error', v_error_message, DATEDIFF(seconds, v_step_start_time, GETDATE()));
 
-            INSERT INTO prod_analytic_db.billing_analyst.refresh_logs (
-                view_name, status, message, duration_seconds
-            )
-            VALUES (
-                rec.name,
-                'Error',
-                v_error_message,
-                DATEDIFF(seconds, v_step_start_time, GETDATE())
-            );
-
-            -- Log a notice instead of halting execution
             RAISE NOTICE 'Error refreshing materialized view %: %', rec.name, v_error_message;
-            CONTINUE; -- Skip to the next materialized view
+            CONTINUE;
         END;
     END LOOP;
 
 EXCEPTION WHEN OTHERS THEN
     SELECT SQLERRM INTO v_error_message;
-    INSERT INTO prod_analytic_db.billing_analyst.refresh_logs (
-        view_name, status, message, duration_seconds
-    )
-    VALUES (
-        'Procedure',
-        'Fatal Error',
-        v_error_message,
-        DATEDIFF(seconds, v_start_time, GETDATE())
-    );
+    INSERT INTO prod_analytic_db.billing_analyst.refresh_logs (view_name, status, message, duration_seconds)
+    VALUES ( 'Procedure', 'Fatal Error', v_error_message, DATEDIFF(seconds, v_start_time, GETDATE()));
 
-    -- Log the fatal error and re-raise
     RAISE EXCEPTION 'Fatal Error in procedure: %', v_error_message;
 END;
 $$ LANGUAGE plpgsql;
 
 
-
 -- call prod_analytic_db.billing_analyst.refresh()
--- select * from prod_analytic_db.billing_analyst.refresh_logs
-
-
-
+-- select * from prod_analytic_db.billing_analyst.refresh_logs order by 1 desc limit 15
 
