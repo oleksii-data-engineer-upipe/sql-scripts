@@ -1,0 +1,22 @@
+# Основні пакети для роботи з Python
+pandas==2.2.3
+numpy>=1.26.0
+python-dateutil>=2.8.2
+pytz>=2020.1
+
+# Google Analytics API
+google-analytics-data==0.18.15
+google-api-core==2.23.0
+google-auth>=2.14.1
+protobuf>=3.20.2
+
+# Redshift інтеграція
+boto3>=1.28.0
+psycopg2-binary>=2.9.0
+
+# Візуалізація (за необхідністю)
+matplotlib>=3.5.0
+
+# Інші корисні пакети
+requests>=2.32.0
+scipy>=1.10.0

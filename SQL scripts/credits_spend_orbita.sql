@@ -86,7 +86,7 @@ BEGIN
         l.action_price AS free_given
     FROM redshift_analytics_db.prodmysqldatabase.log l
     WHERE l.action_type = 'REGISTRATION_BONUS'
-    AND DATE(l.date_created) = CURRENT_DATE;
+    AND DATE(l.date_created) > DATEADD(week, -1, CURRENT_DATE);
 
     -- Створення тимчасової таблиці для f_users_free_spent
     CREATE TEMP TABLE temp_users_free_spent AS
@@ -100,7 +100,7 @@ BEGIN
     WHERE l.is_male = 1
         AND l.reward_status = 2
         AND l.operator_id != 0
-        AND DATE(l.date_created) = CURRENT_DATE
+        AND DATE(l.date_created) > DATEADD(week, -1, CURRENT_DATE)
     GROUP BY 1, 2, 3, 4;
 
     -- Створення тимчасової таблиці для f_man_paid_actions
@@ -128,22 +128,22 @@ BEGIN
         WHERE l.is_male = 1
             AND l.reward_status = 1
             AND l.operator_id != 0
-            AND DATE(l.date_created) = CURRENT_DATE
+            AND DATE(l.date_created) > DATEADD(week, -1, CURRENT_DATE)
         GROUP BY 1, 2, 3, 4, 5, 6
     ) t
     LEFT JOIN redshift_analytics_db.prodmysqldatabase.user_profile up ON t.user_id = up.id
     LEFT JOIN redshift_analytics_db.prodmysqldatabase.v2_woman_information wi ON t.profile_id = wi.id;
 
     -- Оновлення основних таблиць
-    DELETE FROM prod_analytic_db.credits_spend_orbita.users_free_given WHERE date_created = CURRENT_DATE;
+    DELETE FROM prod_analytic_db.credits_spend_orbita.users_free_given WHERE date_created > DATEADD(week, -1, CURRENT_DATE);
     INSERT INTO prod_analytic_db.credits_spend_orbita.users_free_given
     SELECT * FROM temp_users_free_given;
 
-    DELETE FROM prod_analytic_db.credits_spend_orbita.users_free_spent WHERE date_created = CURRENT_DATE;
+    DELETE FROM prod_analytic_db.credits_spend_orbita.users_free_spent WHERE date_created > DATEADD(week, -1, CURRENT_DATE);
     INSERT INTO prod_analytic_db.credits_spend_orbita.users_free_spent
     SELECT * FROM temp_users_free_spent;
 
-    DELETE FROM prod_analytic_db.credits_spend_orbita.man_paid_actions WHERE date = CURRENT_DATE;
+    DELETE FROM prod_analytic_db.credits_spend_orbita.man_paid_actions WHERE date > DATEADD(week, -1, CURRENT_DATE);
     INSERT INTO prod_analytic_db.credits_spend_orbita.man_paid_actions
     SELECT * FROM temp_man_paid_actions;
 
@@ -158,9 +158,13 @@ BEGIN
     DROP TABLE IF EXISTS temp_man_paid_actions;
 
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql
+;
+
 
 call prod_analytic_db.credits_spend_orbita.refresh()
+;
+
 
 --
 --select *
