@@ -1,3 +1,6 @@
 GA4/result/
 .DS_Store
 GA4/.DS_Store
+Script*
+ga4_result_*
+.vscode/
