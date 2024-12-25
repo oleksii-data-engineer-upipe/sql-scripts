@@ -1,6 +1,7 @@
-GA4/result/
+notebooks/development/result/*.csv
 .DS_Store
 GA4/.DS_Store
 Script*
 ga4_result_*
 .vscode/
+sql-scripts/notebooks/development/result/*.csv
