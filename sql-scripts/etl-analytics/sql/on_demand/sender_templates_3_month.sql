@@ -131,7 +131,7 @@ LEFT JOIN redshift_analytics_db.prodmysqldatabase.v2_purchase_history AS ph
   
   
 -- call prod_analytic_db.sender_templates.refresh()
--- select * from prod_analytic_db.sender_templates.refresh_procedure_logs order by 1 desc limit 18
+-- select * from prod_analytic_db.sender_templates.etl_logs order by 1 desc limit 18
   
   
  ------ ------ ------ ------ ------ ------ ------ ------ ------ ------ ------ ------ ------ ------ ------ ------ ------ ------
@@ -154,17 +154,17 @@ BEGIN
     v_step_start_time := v_start_time;
 
 	-- divider
-	INSERT INTO prod_analytic_db.sender_templates.refresh_procedure_logs (log_time, step_name, message) VALUES (GETDATE(), 'START', '--------');
+	INSERT INTO prod_analytic_db.sender_templates.etl_logs (log_time, step_name, message) VALUES (GETDATE(), 'START', '--------');
 
     -- 1. Оновлення мат view
     BEGIN
         REFRESH MATERIALIZED VIEW prod_analytic_db.sender_templates.gold__mv_mailer_report;     
-        INSERT INTO prod_analytic_db.sender_templates.refresh_procedure_logs (step_name, message, duration_seconds)
+        INSERT INTO prod_analytic_db.sender_templates.etl_logs (step_name, message, duration_seconds)
         VALUES ('Step 1. Refresh_mv', 'Success', DATEDIFF(seconds, v_step_start_time, GETDATE()) );
     EXCEPTION WHEN OTHERS THEN
         SELECT SQLERRM INTO v_error_text;
         IF v_error_text IS NOT NULL AND v_error_text != '' THEN
-            INSERT INTO prod_analytic_db.sender_templates.refresh_procedure_logs (step_name, message, duration_seconds)
+            INSERT INTO prod_analytic_db.sender_templates.etl_logs (step_name, message, duration_seconds)
             VALUES ('refresh_mv_error', 'Error: ' || v_error_text, DATEDIFF(seconds, v_step_start_time, GETDATE()) );
         END IF;
         RAISE EXCEPTION 'Error in refresh_mv step: %', v_error_text;
@@ -180,7 +180,7 @@ BEGIN
         
         GET DIAGNOSTICS v_deleted_rows = ROW_COUNT;
         
-        INSERT INTO prod_analytic_db.sender_templates.refresh_procedure_logs (step_name, message, affected_rows, duration_seconds)
+        INSERT INTO prod_analytic_db.sender_templates.etl_logs (step_name, message, affected_rows, duration_seconds)
         VALUES ('Step 2. Delete_old_data', 'Success', v_deleted_rows, DATEDIFF(seconds, v_step_start_time, GETDATE()) );
 
         v_step_start_time := GETDATE();
@@ -208,13 +208,13 @@ BEGIN
 
         GET DIAGNOSTICS v_inserted_rows = ROW_COUNT;
         
-        INSERT INTO prod_analytic_db.sender_templates.refresh_procedure_logs (step_name, message, affected_rows, duration_seconds)
+        INSERT INTO prod_analytic_db.sender_templates.etl_logs (step_name, message, affected_rows, duration_seconds)
         VALUES ( 'Step 3. Insert_new_data', 'Success', v_inserted_rows, DATEDIFF(seconds, v_step_start_time, GETDATE()) );
 
     EXCEPTION WHEN OTHERS THEN
         SELECT SQLERRM INTO v_error_text;
         IF v_error_text IS NOT NULL AND v_error_text != '' THEN
-            INSERT INTO prod_analytic_db.sender_templates.refresh_procedure_logs ( step_name, message, duration_seconds)
+            INSERT INTO prod_analytic_db.sender_templates.etl_logs ( step_name, message, duration_seconds)
             VALUES ( 'data_update_error', 'Error updating data: ' || v_error_text, DATEDIFF(seconds, v_step_start_time, GETDATE()));
         END IF;
         RAISE EXCEPTION 'Error in data update step: %', v_error_text;
@@ -226,13 +226,13 @@ BEGIN
     BEGIN
         ANALYZE prod_analytic_db.sender_templates.gold__basic_v2;
         
-        INSERT INTO prod_analytic_db.sender_templates.refresh_procedure_logs (step_name, message, duration_seconds)
+        INSERT INTO prod_analytic_db.sender_templates.etl_logs (step_name, message, duration_seconds)
         VALUES ( 'Step 4. Analyze_table', 'Success',  DATEDIFF(seconds, v_step_start_time, GETDATE()));
 
     EXCEPTION WHEN OTHERS THEN
         SELECT SQLERRM INTO v_error_text;
         IF v_error_text IS NOT NULL AND v_error_text != '' THEN
-            INSERT INTO prod_analytic_db.sender_templates.refresh_procedure_logs (step_name, message, duration_seconds)
+            INSERT INTO prod_analytic_db.sender_templates.etl_logs (step_name, message, duration_seconds)
             VALUES ( 'analyze_error', 'Error during ANALYZE: ' || v_error_text, DATEDIFF(seconds, v_step_start_time, GETDATE()));
         END IF;
         RAISE EXCEPTION 'Error in analyze step: %', v_error_text;
@@ -256,26 +256,26 @@ BEGIN
         FROM prod_analytic_db.sender_templates.gold__basic_v2 
         WHERE date > CURRENT_DATE - INTERVAL '3 months';
 
-        INSERT INTO prod_analytic_db.sender_templates.refresh_procedure_logs (step_name, message, duration_seconds )
+        INSERT INTO prod_analytic_db.sender_templates.etl_logs (step_name, message, duration_seconds )
         VALUES ( 'Step 5. Update_view', 'Success',DATEDIFF(seconds, v_step_start_time, GETDATE()));
 
     EXCEPTION WHEN OTHERS THEN
         SELECT SQLERRM INTO v_error_text;
         IF v_error_text IS NOT NULL AND v_error_text != '' THEN
-            INSERT INTO prod_analytic_db.sender_templates.refresh_procedure_logs ( step_name, message, duration_seconds)
+            INSERT INTO prod_analytic_db.sender_templates.etl_logs ( step_name, message, duration_seconds)
             VALUES ( 'view_update_error', 'Error updating view: ' || v_error_text, DATEDIFF(seconds, v_step_start_time, GETDATE()));
         END IF;
         RAISE EXCEPTION 'Error in view update step: %', v_error_text;
     END;
 
     -- Логуємо успішне завершення
-    INSERT INTO prod_analytic_db.sender_templates.refresh_procedure_logs ( step_name, message, affected_rows,  duration_seconds)
+    INSERT INTO prod_analytic_db.sender_templates.etl_logs ( step_name, message, affected_rows,  duration_seconds)
     VALUES ( 'Step 6. Procedure_complete', 'Success', v_inserted_rows - v_deleted_rows, DATEDIFF(seconds, v_start_time, GETDATE()));
 
 EXCEPTION WHEN OTHERS THEN
     SELECT SQLERRM INTO v_error_text;
     IF v_error_text IS NOT NULL AND v_error_text != '' THEN
-        INSERT INTO prod_analytic_db.sender_templates.refresh_procedure_logs ( step_name, message, duration_seconds)
+        INSERT INTO prod_analytic_db.sender_templates.etl_logs ( step_name, message, duration_seconds)
         VALUES ( 'procedure_error', 'Fatal procedure error: ' || v_error_text, DATEDIFF(seconds, v_start_time, GETDATE()));
     END IF;
     RAISE EXCEPTION 'Fatal procedure error: %', v_error_text;
