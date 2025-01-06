@@ -59,4 +59,3 @@ $$ LANGUAGE plpgsql;
 
 -- call prod_analytic_db.billing_analyst.refresh()
 -- select * from prod_analytic_db.billing_analyst.refresh_logs order by 1 desc limit 15
-

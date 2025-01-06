@@ -136,4 +136,4 @@ FROM daily_category_stats c
 LEFT JOIN daily_totals t ON t.dd = c.dd
 ;
 
-refresh MATERIALIZED VIEW prod_analytic_db.credits_spend_orbita.mv_user_spend_day_to_day_dtd;
+-- refresh MATERIALIZED VIEW prod_analytic_db.credits_spend_orbita.mv_user_spend_day_to_day_dtd;

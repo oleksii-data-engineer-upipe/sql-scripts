@@ -1,4 +1,5 @@
 notebooks/development/result/*.csv
+.gitignore
 .DS_Store
 GA4/.DS_Store
 Script*

@@ -59,19 +59,19 @@ CREATE SCHEMA credits_spend_orbita;
 --LEFT JOIN redshift_analytics_db.prodmysqldatabase.v2_woman_information wi ON t.profile_id = wi.id;
 
 
-
-CREATE TABLE credits_spend_orbita.users_free_given
-DISTSTYLE KEY DISTKEY(user_id) SORTKEY(date_created)
-AS SELECT * FROM prod_analytic_db.credits_spend_orbita.f_users_free_given;
-
-CREATE TABLE credits_spend_orbita.users_free_spent
-DISTSTYLE KEY DISTKEY(user_id) SORTKEY(date_created)
-AS SELECT * FROM prod_analytic_db.credits_spend_orbita.f_users_free_spent;
-
-CREATE TABLE credits_spend_orbita.man_paid_actions
-DISTSTYLE KEY DISTKEY(operator_id) SORTKEY(date)
-AS SELECT * FROM prod_analytic_db.credits_spend_orbita.f_man_paid_actions;
-
+--
+--CREATE TABLE credits_spend_orbita.users_free_given
+--DISTSTYLE KEY DISTKEY(user_id) SORTKEY(date_created)
+--AS SELECT * FROM prod_analytic_db.credits_spend_orbita.f_users_free_given;
+--
+--CREATE TABLE credits_spend_orbita.users_free_spent
+--DISTSTYLE KEY DISTKEY(user_id) SORTKEY(date_created)
+--AS SELECT * FROM prod_analytic_db.credits_spend_orbita.f_users_free_spent;
+--
+--CREATE TABLE credits_spend_orbita.man_paid_actions
+--DISTSTYLE KEY DISTKEY(operator_id) SORTKEY(date)
+--AS SELECT * FROM prod_analytic_db.credits_spend_orbita.f_man_paid_actions;
+--
 
 
 CREATE OR REPLACE PROCEDURE prod_analytic_db.credits_spend_orbita.refresh()

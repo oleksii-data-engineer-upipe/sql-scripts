@@ -176,7 +176,7 @@ BEGIN
     BEGIN
         -- 2.1 Видалення старих даних
         DELETE FROM prod_analytic_db.sender_templates.gold__basic_v2 
-        WHERE date >= CURRENT_DATE - INTERVAL '1 days';
+        WHERE date >= CURRENT_DATE - INTERVAL '2 days';
         
         GET DIAGNOSTICS v_deleted_rows = ROW_COUNT;
         
@@ -197,7 +197,7 @@ BEGIN
             tu, tu_week, tu_24h, tu_week_24h,
             age, email_domain, site_domain, country
         FROM prod_analytic_db.sender_templates.gold__mv_mailer_report
-        WHERE date >= CURRENT_DATE - INTERVAL '1 days'
+        WHERE date >= CURRENT_DATE - INTERVAL '2 days'
         GROUP BY id, date, week,
             chain_name, template_name, subscriber_external_id,
             view, view_24h, view_week, view_week_24h,
