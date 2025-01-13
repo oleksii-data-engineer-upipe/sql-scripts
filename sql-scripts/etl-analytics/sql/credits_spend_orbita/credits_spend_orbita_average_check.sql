@@ -1,183 +1,74 @@
 CREATE MATERIALIZED VIEW prod_analytic_db.credits_spend_orbita.mv_average_check
 DISTSTYLE KEY DISTKEY(external_id) SORTKEY(date_added)
 AS
-WITH base_profiles AS (
-    SELECT 
-        external_id, 
-        gender, 
-        site_id, 
-		DATEADD(second, CAST(register_date AS BIGINT), '1970-01-01') as register_date
+WITH profiles AS (
+    SELECT external_id, gender, site_id, 
+           DATE(TIMESTAMP 'epoch' + CAST(register_date AS BIGINT) * INTERVAL '1 second') as registered
     FROM redshift_analytics_db.prodmysqldatabase.user_profile
-    WHERE name NOT LIKE '%test%'
-        AND email NOT LIKE '%test%'
-        AND email NOT LIKE '%delete%'
-        AND email NOT LIKE '%+%'
-        AND email NOT LIKE '%upiple%'
-        AND email NOT LIKE '%irens%'
-        AND email NOT LIKE '%galaktica%'
-        AND email NOT LIKE '%i.ua%'
-        AND tester = 0
+    WHERE name NOT LIKE '%test%' AND email NOT LIKE '%test%'
+        AND email NOT LIKE '%delete%' AND email NOT LIKE '%+%'
+        AND tester = 0 AND email NOT LIKE '%upiple%' AND email NOT LIKE '%irens %'
 ),
-
-user_roles AS (
-    SELECT 
-        external_id,
-        CAST(date_heigh_role AS DATE) AS date_heigh_role,
-        CAST(date_maybe_height AS DATE) AS date_maybe_height
-    FROM redshift_analytics_db.prodmysqldatabase.v3_paid_user_marked
-),
-
-paid_actions AS (
-    SELECT
-        CAST(fp.date AS DATE) AS date_added,
-        fp.male_external_id AS external_id,
-        up.gender,
-        up.site_id,
-        SUM(fp.action_price) * 0.22 AS amount,
-        CASE 
-            WHEN ur.date_heigh_role <= 		CAST(fp.date AS DATE) THEN 2
-            WHEN ur.date_maybe_height <= 	CAST(fp.date AS DATE) THEN 1
-            ELSE 0
-        END AS type,
-        up.register_date,
+actions_grouped AS (
+    SELECT fp.date as date_added, fp.male_external_id as external_id,
+        SUM(fp.action_price) * 0.22 as amount,
         CASE 
             WHEN fp.action_type IN ('GET_MEETING', 'MAKE_ORDER_APPROVE') THEN 'Gift'
             ELSE 'Balance'
-        END AS action_type
+        END as Action
     FROM prod_analytic_db.credits_spend_orbita.man_paid_actions fp
-    INNER JOIN base_profiles up  	ON up.external_id = fp.male_external_id
-    LEFT JOIN user_roles ur  		ON ur.external_id = fp.male_external_id
-    -- WHERE CAST(fp.date AS DATE) >= DATEADD(week, -7, TRUNC(CURRENT_DATE))
-    GROUP BY 1,2,3,4,6,7,8
+    WHERE fp.date = DATEADD(DAY, -1, CURRENT_DATE)
+    GROUP BY fp.date, fp.male_external_id, Action
 ),
-
-recent_purchases AS (
-    SELECT 
-        external_id,
-        CAST(date_added AS DATE) AS date_added,
-        price,
-        first_package
-    FROM redshift_analytics_db.prodmysqldatabase.v2_purchase_history
-    -- WHERE CAST(date_added AS DATE) >= DATEADD(week, -10, TRUNC(CURRENT_DATE))
-),
-
-purchase_data AS (
-    SELECT
-        ph.date_added,
-        ph.external_id,
-        up.gender,
-        up.site_id,
-        SUM(ph.price) AS amount,
+m1 AS (
+    SELECT ag.date_added, ag.external_id, p.gender, p.site_id, p.registered,
+        ag.amount, 
         CASE 
-            WHEN ur.date_heigh_role <= ph.date_added THEN 2
-            WHEN ur.date_maybe_height <= ph.date_added THEN 1
-            ELSE 0
-        END AS type,
-        up.register_date,
-        'Пополнение' AS action_type
-    FROM recent_purchases ph
-    INNER JOIN base_profiles up  	ON up.external_id = ph.external_id
-    LEFT JOIN user_roles ur 			ON ur.external_id = ph.external_id
-    GROUP BY 1,2,3,4,6,7,8
+            WHEN pm.date_heigh_role <= ag.date_added THEN 2
+            WHEN pm.date_maybe_height <= ag.date_added THEN 1 
+            ELSE 0 
+        END as type, 
+        ag.Action
+    FROM actions_grouped ag
+    LEFT JOIN profiles p ON p.external_id = ag.external_id
+    LEFT JOIN redshift_analytics_db.prodmysqldatabase.v3_paid_user_marked pm ON pm.external_id = ag.external_id
 ),
-
-combined_actions AS (
-    SELECT * FROM paid_actions
+purchases_grouped AS (
+    SELECT ph.date_added, ph.external_id, SUM(ph.price) as amount,
+        'Пополнение' as Action
+    FROM redshift_analytics_db.prodmysqldatabase.v2_purchase_history ph
+    WHERE ph.date_added = DATEADD(DAY, -1, CURRENT_DATE)
+    GROUP BY ph.date_added, ph.external_id
+),
+m2 AS (
+    SELECT pg.date_added, pg.external_id, p.gender, p.site_id, p.registered,
+        pg.amount, 
+        CASE 
+            WHEN pm.date_heigh_role <= pg.date_added THEN 2
+            WHEN pm.date_maybe_height <= pg.date_added THEN 1 
+            ELSE 0 
+        END as type, 
+        pg.Action
+    FROM purchases_grouped pg
+    LEFT JOIN profiles p ON p.external_id = pg.external_id
+    LEFT JOIN redshift_analytics_db.prodmysqldatabase.v3_paid_user_marked pm ON pm.external_id = pg.external_id
+),
+combined_data AS (
+    SELECT date_added, external_id, gender, site_id, registered, amount, type, Action
+    FROM m1
     UNION ALL
-    SELECT * FROM purchase_data
-),
-
-final_result AS (
-    SELECT
-        ca.*,
-        SUM(rp.price) OVER (
-            PARTITION BY ca.external_id 
-            ORDER BY ca.date_added
-            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-        ) AS running_total,
-        FIRST_VALUE(
-            CASE 
-                WHEN rp.first_package = 1 THEN rp.date_added 
-                ELSE NULL 
-            END IGNORE NULLS
-        ) OVER (
-            PARTITION BY ca.external_id 
-            ORDER BY rp.date_added
-            ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-        ) AS converted_date
-    FROM combined_actions ca
-    LEFT JOIN recent_purchases rp
-        ON rp.external_id = ca.external_id
-        AND rp.date_added <= ca.date_added
+    SELECT date_added, external_id, gender, site_id, registered, amount, type, Action
+    FROM m2
 )
 
-SELECT *
-FROM final_result
-
-
---- STEP 2. LOAD INTO TABLE FROM VIEW FOR ALL PERIOD
-
-create table prod_analytic_db.credits_spend_orbita.average_check
-DISTSTYLE KEY DISTKEY(external_id) SORTKEY(date_added)
-AS 
-SELECT * 
-FROM prod_analytic_db.credits_spend_orbita.mv_average_check
-
---- STEP 3. MODIFY VIEW FOR LAST # DAYS PERIOD AND REFRESH TABLE
-
-
-CREATE OR REPLACE PROCEDURE prod_analytic_db.credits_spend_orbita.refresh_average_check()
-AS $$
-BEGIN
-    REFRESH MATERIALIZED VIEW prod_analytic_db.credits_spend_orbita.mv_average_check;
+SELECT cd.*, ph_agg.running_total, ph_agg.converted
+FROM combined_data cd
+LEFT JOIN (
+    SELECT external_id, date_added,
+        SUM(price) as running_total,
+        MAX(CASE WHEN first_package = 1 THEN date_added END) as converted
+    FROM redshift_analytics_db.prodmysqldatabase.v2_purchase_history
+    GROUP BY external_id, date_added
+) ph_agg ON ph_agg.external_id = cd.external_id 
+    AND ph_agg.date_added <= cd.date_added
     
-    DELETE 
-		FROM prod_analytic_db.credits_spend_orbita.average_check 
-		WHERE date_added >= CURRENT_DATE - INTERVAL '7 days'
-		;
-
-    INSERT INTO prod_analytic_db.credits_spend_orbita.average_check
-		SELECT
-		   	date_added
-			,external_id
-			,gender
-			,site_id
-			,amount
-			,"type"
-			,register_date
-			,action_type
-			,running_total
-			,converted_date
-		FROM prod_analytic_db.credits_spend_orbita.mv_average_check
-		WHERE date_added >= CURRENT_DATE - INTERVAL '7 days';
-
-    ANALYZE prod_analytic_db.credits_spend_orbita.average_check;
-    
-END;
-$$ LANGUAGE plpgsql;
-
-
-call prod_analytic_db.credits_spend_orbita.refresh_average_check();
-
--- REFRESH MATERIALIZED VIEW prod_analytic_db.credits_spend_orbita.mv_average_check
-
-
--- select * from prod_analytic_db.credits_spend_orbita.mv_average_check
-
-/*
-SELECT date_added, count(*) 
-FROM credits_spend_orbita.average_check
-GROUP BY date_added 
-ORDER BY 1 DESC 
-LIMIT 10
-;
-*/
-
-/*
-SELECT date_added, count(*) 
-FROM credits_spend_orbita.mv_average_check
-GROUP BY date_added 
-ORDER BY 1 DESC 
-LIMIT 25
-;
-*/
