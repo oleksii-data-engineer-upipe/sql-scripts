@@ -54,7 +54,7 @@ m2 AS (
     LEFT JOIN redshift_analytics_db.prodmysqldatabase.v3_paid_user_marked pm ON pm.external_id = pg.external_id
 ),
 combined_data AS (
-    SELECT date_added, external_id, gender, site_id, registered, amount, type, Action
+    SELECT date_added, external_id, gender, site_id, registered as register_date, amount, type, Action
     FROM m1
     UNION ALL
     SELECT date_added, external_id, gender, site_id, registered, amount, type, Action
@@ -71,4 +71,56 @@ LEFT JOIN (
     GROUP BY external_id, date_added
 ) ph_agg ON ph_agg.external_id = cd.external_id 
     AND ph_agg.date_added <= cd.date_added
+    
+    
+    
+    -------------------------------
+    -------------------------------
+
+    
+    
+    --- STEP 2. LOAD INTO TABLE FROM VIEW FOR ALL PERIOD
+
+--create table prod_analytic_db.credits_spend_orbita.average_check
+--DISTSTYLE KEY DISTKEY(external_id) SORTKEY(date_added)
+--AS 
+--SELECT * 
+--FROM prod_analytic_db.credits_spend_orbita.mv_average_check
+
+--- STEP 3. MODIFY VIEW FOR LAST # DAYS PERIOD AND REFRESH TABLE
+
+
+CREATE OR REPLACE PROCEDURE prod_analytic_db.credits_spend_orbita.refresh_average_check()
+AS $$
+BEGIN
+    REFRESH MATERIALIZED VIEW prod_analytic_db.credits_spend_orbita.mv_average_check;
+    
+    DELETE 
+		FROM prod_analytic_db.credits_spend_orbita.average_check 
+		WHERE date_added >= CURRENT_DATE - INTERVAL '7 days'
+		;
+
+    INSERT INTO prod_analytic_db.credits_spend_orbita.average_check
+		SELECT
+		   	date_added
+			,external_id
+			,gender
+			,site_id
+			,amount
+			,"type"
+			,register_date
+			,action
+			,running_total
+			,converted
+		FROM prod_analytic_db.credits_spend_orbita.mv_average_check
+		WHERE date_added >= CURRENT_DATE - INTERVAL '7 days';
+
+    ANALYZE prod_analytic_db.credits_spend_orbita.average_check;
+    
+END;
+$$ LANGUAGE plpgsql;
+
+
+call prod_analytic_db.credits_spend_orbita.refresh_average_check();
+
     
