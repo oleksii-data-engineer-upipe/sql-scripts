@@ -9,6 +9,7 @@ WITH profiles AS (
         AND email NOT LIKE '%delete%' AND email NOT LIKE '%+%'
         AND tester = 0 AND email NOT LIKE '%upiple%' AND email NOT LIKE '%irens %'
 ),
+
 actions_grouped AS (
     SELECT fp.date as date_added, fp.male_external_id as external_id,
         SUM(fp.action_price) * 0.22 as amount,
@@ -17,9 +18,10 @@ actions_grouped AS (
             ELSE 'Balance'
         END as Action
     FROM prod_analytic_db.credits_spend_orbita.man_paid_actions fp
-    WHERE fp.date = DATEADD(DAY, -1, CURRENT_DATE)
+    WHERE fp.date >= DATEADD(MONTH, -2, CURRENT_DATE)
     GROUP BY fp.date, fp.male_external_id, Action
 ),
+
 m1 AS (
     SELECT ag.date_added, ag.external_id, p.gender, p.site_id, p.registered,
         ag.amount, 
@@ -33,13 +35,15 @@ m1 AS (
     LEFT JOIN profiles p ON p.external_id = ag.external_id
     LEFT JOIN redshift_analytics_db.prodmysqldatabase.v3_paid_user_marked pm ON pm.external_id = ag.external_id
 ),
+
 purchases_grouped AS (
     SELECT ph.date_added, ph.external_id, SUM(ph.price) as amount,
         'Пополнение' as Action
     FROM redshift_analytics_db.prodmysqldatabase.v2_purchase_history ph
-    WHERE ph.date_added = DATEADD(DAY, -1, CURRENT_DATE)
+    WHERE ph.date_added >= DATEADD(MONTH, -2, CURRENT_DATE)
     GROUP BY ph.date_added, ph.external_id
 ),
+
 m2 AS (
     SELECT pg.date_added, pg.external_id, p.gender, p.site_id, p.registered,
         pg.amount, 
@@ -53,6 +57,7 @@ m2 AS (
     LEFT JOIN profiles p ON p.external_id = pg.external_id
     LEFT JOIN redshift_analytics_db.prodmysqldatabase.v3_paid_user_marked pm ON pm.external_id = pg.external_id
 ),
+
 combined_data AS (
     SELECT date_added, external_id, gender, site_id, registered as register_date, amount, type, Action
     FROM m1
@@ -60,6 +65,7 @@ combined_data AS (
     SELECT date_added, external_id, gender, site_id, registered, amount, type, Action
     FROM m2
 )
+
 
 SELECT cd.*, ph_agg.running_total, ph_agg.converted
 FROM combined_data cd
@@ -71,7 +77,7 @@ LEFT JOIN (
     GROUP BY external_id, date_added
 ) ph_agg ON ph_agg.external_id = cd.external_id 
     AND ph_agg.date_added <= cd.date_added
-    
+    group by cd.date_added, cd.external_id, cd.gender, cd.site_id, register_date, cd.amount, cd.type, cd.action, ph_agg.running_total, ph_agg.converted
     
     
     -------------------------------
@@ -97,7 +103,7 @@ BEGIN
     
     DELETE 
 		FROM prod_analytic_db.credits_spend_orbita.average_check 
-		WHERE date_added >= CURRENT_DATE - INTERVAL '7 days'
+		WHERE date_added >= CURRENT_DATE - INTERVAL '2 month'
 		;
 
     INSERT INTO prod_analytic_db.credits_spend_orbita.average_check
@@ -113,7 +119,7 @@ BEGIN
 			,running_total
 			,converted
 		FROM prod_analytic_db.credits_spend_orbita.mv_average_check
-		WHERE date_added >= CURRENT_DATE - INTERVAL '7 days';
+		WHERE date_added >= CURRENT_DATE - INTERVAL '2 month';
 
     ANALYZE prod_analytic_db.credits_spend_orbita.average_check;
     
@@ -122,5 +128,14 @@ $$ LANGUAGE plpgsql;
 
 
 call prod_analytic_db.credits_spend_orbita.refresh_average_check();
+
+--
+--select date_added, count(*)
+--from credits_spend_orbita.average_check
+--group by date_added
+--order by 1 desc
+--;
+
+
 
     
